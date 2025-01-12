@@ -1,1 +1,1 @@
-## Jiannius Myinvois SDK
+## Jiannius Stripe SDK Wrapper
