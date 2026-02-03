@@ -29,9 +29,9 @@ class Stripe
     public function getSettings($key = null)
     {
         $settings = [
-            'public_key' => data_get($this->settings, 'public_key') ?? env('STRIPE_PUBLIC_KEY'),
-            'secret_key' => data_get($this->settings, 'secret_key') ?? env('STRIPE_SECRET_KEY'),
-            'webhook_secret' => data_get($this->settings, 'webhook_secret') ?? env('STRIPE_WEBHOOK_SECRET'),
+            'public_key' => data_get($this->settings, 'public_key') ?? config('services.stripe.public_key'),
+            'secret_key' => data_get($this->settings, 'secret_key') ?? config('services.stripe.secret_key'),
+            'webhook_secret' => data_get($this->settings, 'webhook_secret') ?? config('services.stripe.webhook_secret'),
         ];
 
         return $key ? data_get($settings, $key) : $settings;
