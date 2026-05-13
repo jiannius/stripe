@@ -4,6 +4,13 @@ namespace Jiannius\Stripe\Helpers;
 
 class Sample
 {
+    /**
+     * Build a sample Checkout Session payload for development and fixtures.
+     *
+     * Exposed via `Stripe::sample()`.
+     *
+     * @return array<string, mixed>
+     */
     public static function build()
     {
         return [
