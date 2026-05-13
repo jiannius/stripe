@@ -44,17 +44,15 @@ class Stripe
 
     public function getWebhookPayload()
     {
-        $input = @file_get_contents('php://input');
-
-        return json_decode($input, true);
+        return json_decode($this->getRawWebhookInput(), true);
     }
 
     public function getWebhookStatus()
     {
+        if (!$this->validateWebhookPayload()) return null;
+
         $payload = $this->getWebhookPayload();
         $event = data_get($payload, 'type');
-
-        if (!$this->validateWebhookPayload()) return null;
 
         $isRenew = in_array($event, [
             'invoice.paid',
@@ -68,14 +66,14 @@ class Stripe
         ]);
 
         $isSuccess = in_array($event, [
-            'checkout.session.async_payment_succeeded', 
+            'checkout.session.async_payment_succeeded',
             'invoice.paid',
         ]) || (
             $event === 'checkout.session.completed'
             && data_get($payload, 'data.object.payment_status') === 'paid'
         );
 
-        $isProcessing = $event === 'checkout.session.completed' 
+        $isProcessing = $event === 'checkout.session.completed'
             && data_get($payload, 'data.object.payment_status') !== 'paid';
 
         return collect([
@@ -89,18 +87,15 @@ class Stripe
 
     public function validateWebhookPayload() : bool
     {
-        $input = @file_get_contents('php://input');
         $secret = $this->getSettings('webhook_secret');
-        $sigheader = $_SERVER['HTTP_STRIPE_SIGNATURE'];
+        $sigheader = (string) (request()->header('Stripe-Signature') ?? '');
 
         try {
-            $event = \Stripe\Webhook::constructEvent($input, $sigheader, $secret);
-        } catch (\Stripe\Exception\SignatureVerificationException $e) {
-            $event = false;
-        }
-
-        if (!$event) {
-            logger('Unable to validate signature with the webhook signing secret.');
+            \Stripe\Webhook::constructEvent($this->getRawWebhookInput(), $sigheader, $secret);
+        } catch (\Stripe\Exception\SignatureVerificationException | \UnexpectedValueException $e) {
+            logger()->warning('Unable to validate Stripe webhook signature.', [
+                'error' => $e->getMessage(),
+            ]);
             return false;
         }
 
@@ -111,24 +106,13 @@ class Stripe
     {
         $params = [
             ...$params,
-            // change product amount to proper format (eg. 25.00 -> 2500)
             'line_items' => collect(data_get($params, 'line_items'))
-                ->map(fn($item) =>
-                    collect($item)->replaceRecursive([
-                        'price_data' => [
-                            'unit_amount' => str(data_get($item, 'price_data.unit_amount'))
-                                ->replace('.', '')
-                                ->replace(',', '')
-                                ->toString(),
-                        ],
-                    ])->toArray()
-                )
+                ->map(fn($item) => $this->normalizeLineItem($item))
                 ->toArray(),
             'success_url' => route('__stripe.success', data_get($params, 'metadata', [])),
             'cancel_url' => route('__stripe.cancel', data_get($params, 'metadata', [])),
         ];
 
-        // create stripe checkout session
         $session = $this->getStripeClient()
             ->checkout
             ->sessions
@@ -147,20 +131,23 @@ class Stripe
     public function createWebhook() : mixed
     {
         $url = route('__stripe.webhook');
-        $webhooks = $this->getStripeClient()->webhookEndpoints->all();
-        
-        // delete previously created webhook
-        if ($webhook = collect($webhooks->data)->where('url', $url)->first()) {
-            $this->getStripeClient()->webhookEndpoints->delete(data_get($webhook, 'id'));
+        $client = $this->getStripeClient();
+
+        foreach ($client->webhookEndpoints->all()->autoPagingIterator() as $endpoint) {
+            if (data_get($endpoint, 'url') === $url) {
+                $client->webhookEndpoints->delete(data_get($endpoint, 'id'));
+            }
         }
 
-        $webhook = $this->getStripeClient()->webhookEndpoints->create([
+        $webhook = $client->webhookEndpoints->create([
             'url' => $url,
             'enabled_events' => [
                 'checkout.session.async_payment_failed',
                 'checkout.session.async_payment_succeeded',
                 'checkout.session.completed',
                 'checkout.session.expired',
+                'invoice.paid',
+                'invoice.payment_failed',
             ],
         ]);
 
@@ -187,5 +174,32 @@ class Stripe
     public function sample() : array
     {
         return Sample::build();
+    }
+
+    protected function getRawWebhookInput() : string
+    {
+        return (string) request()->getContent();
+    }
+
+    protected function normalizeLineItem(array $item) : array
+    {
+        if (!isset($item['price_data']['unit_amount'])) {
+            return $item;
+        }
+
+        $item['price_data']['unit_amount'] = $this->toStripeAmount($item['price_data']['unit_amount']);
+
+        return $item;
+    }
+
+    protected function toStripeAmount($amount) : int
+    {
+        $clean = str_replace(',', '', (string) $amount);
+
+        if (str_contains($clean, '.')) {
+            return (int) round(((float) $clean) * 100);
+        }
+
+        return (int) $clean;
     }
 }
