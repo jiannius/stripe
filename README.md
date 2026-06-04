@@ -253,6 +253,22 @@ No code changes required — every public method is preserved. Two things to do 
    Or in the Stripe Dashboard, add `invoice.paid` and `invoice.payment_failed` to the existing endpoint.
 2. **Adopt `getValidatedEvent()`** in your webhook controller to drop the second JSON parse and to get the event ID for idempotency.
 
+## Webhook idempotency (default-on)
+
+The package dedupes Stripe's retried/duplicate webhook deliveries via the
+`stripe_webhook_events` ledger and the `EnsureWebhookIdempotency` middleware,
+attached automatically to the `__stripe.webhook` route. Each delivery is
+processed at most once; a handler that returns a non-2xx leaves the event
+unrecorded so Stripe's retry reprocesses it. This is a best-effort gate — the
+consuming app's domain unique constraint is the authoritative backstop against
+duplicate side effects.
+
+Run migrations after upgrading (the package ships `stripe_webhook_events`).
+
+Config (publish with `--tag=stripe-config`): set `stripe.webhook.idempotent`
+to `false` to disable, or `stripe.webhook.ip_allowlist` to `true` to also
+reject non-Stripe IPs.
+
 ## License
 
 [MIT](LICENSE.md).

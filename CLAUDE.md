@@ -28,3 +28,5 @@ A thin Laravel wrapper around `stripe/stripe-php` (Stripe SDK v10). Published as
 **Webhook registration is destructive.** `createWebhook()` lists all existing endpoints, deletes any whose URL matches `route('__stripe.webhook')`, then creates a fresh one. The returned secret is what should be stored as `webhook_secret`. Re-running rotates the secret.
 
 **Helpers directory.** `src/Helpers/` is for static utility classes (see `Sample.php`, exposed via `Stripe::sample()`, which returns a fixture payload for testing checkout flows). Static `build()`-style methods are the pattern.
+
+**Webhook idempotency.** Webhook deliveries are deduped by event id via the `stripe_webhook_events` ledger + `EnsureWebhookIdempotency` middleware (default-on, `config('stripe.webhook.idempotent')`).
