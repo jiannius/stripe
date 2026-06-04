@@ -17,6 +17,14 @@
             "Jiannius\\Stripe\\": "src/"
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Jiannius\\Stripe\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    },
     "authors": [
         {
             "name": "TJ",
