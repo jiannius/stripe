@@ -317,20 +317,25 @@ class Stripe
 
     /**
      * Record an event row if absent (idempotent). Does not set processed_at.
+     * A null $type never overwrites an existing value.
      */
     public function recordEvent(string $eventId, ?string $type = null) : StripeWebhookEvent
     {
-        return StripeWebhookEvent::firstOrCreate(['event_id' => $eventId], ['type' => $type]);
+        return StripeWebhookEvent::firstOrCreate(
+            ['event_id' => $eventId],
+            array_filter(['type' => $type], fn($v) => $v !== null),
+        );
     }
 
     /**
-     * Mark an event processed (creating its row if absent).
+     * Mark an event processed (creating its row if absent). A null $type never
+     * overwrites an existing value.
      */
     public function markProcessedEvent(string $eventId, ?string $type = null) : void
     {
         StripeWebhookEvent::updateOrCreate(
             ['event_id' => $eventId],
-            ['type' => $type, 'processed_at' => now()],
+            array_filter(['type' => $type, 'processed_at' => now()], fn($v) => $v !== null),
         );
     }
 

@@ -26,4 +26,16 @@ class IdempotencyHelpersTest extends TestCase
 
         $this->assertSame(1, StripeWebhookEvent::where('event_id', 'evt_2')->count());
     }
+
+    public function test_marking_processed_with_null_type_preserves_existing_type()
+    {
+        $stripe = new Stripe();
+        $stripe->recordEvent('evt_type', 'invoice.paid');   // row now has type
+
+        $stripe->markProcessedEvent('evt_type', null);        // null must not clobber
+
+        $row = StripeWebhookEvent::where('event_id', 'evt_type')->first();
+        $this->assertSame('invoice.paid', $row->type);
+        $this->assertNotNull($row->processed_at);
+    }
 }
