@@ -13,7 +13,7 @@ class StripeServiceProvider extends ServiceProvider
      */
     public function register() : void
     {
-        //
+        $this->mergeConfigFrom(__DIR__.'/../config/stripe.php', 'stripe');
     }
 
     /**
@@ -24,6 +24,11 @@ class StripeServiceProvider extends ServiceProvider
     public function boot() : void
     {
         $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->app->bind('stripe', fn($app) => new \Jiannius\Stripe\Stripe());
+
+        $this->publishes([
+            __DIR__.'/../config/stripe.php' => config_path('stripe.php'),
+        ], 'stripe-config');
     }
 }

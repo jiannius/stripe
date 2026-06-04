@@ -3,6 +3,7 @@
 namespace Jiannius\Stripe;
 
 use Jiannius\Stripe\Helpers\Sample;
+use Jiannius\Stripe\Models\StripeWebhookEvent;
 
 class Stripe
 {
@@ -302,6 +303,40 @@ class Stripe
     public function sample() : array
     {
         return Sample::build();
+    }
+
+    /**
+     * Whether a Stripe webhook event id has already been fully processed.
+     */
+    public function hasProcessedEvent(string $eventId) : bool
+    {
+        return StripeWebhookEvent::where('event_id', $eventId)
+            ->whereNotNull('processed_at')
+            ->exists();
+    }
+
+    /**
+     * Record an event row if absent (idempotent). Does not set processed_at.
+     * A null $type never overwrites an existing value.
+     */
+    public function recordEvent(string $eventId, ?string $type = null) : StripeWebhookEvent
+    {
+        return StripeWebhookEvent::firstOrCreate(
+            ['event_id' => $eventId],
+            array_filter(['type' => $type], fn($v) => $v !== null),
+        );
+    }
+
+    /**
+     * Mark an event processed (creating its row if absent). A null $type never
+     * overwrites an existing value.
+     */
+    public function markProcessedEvent(string $eventId, ?string $type = null) : void
+    {
+        StripeWebhookEvent::updateOrCreate(
+            ['event_id' => $eventId],
+            array_filter(['type' => $type, 'processed_at' => now()], fn($v) => $v !== null),
+        );
     }
 
     /**
