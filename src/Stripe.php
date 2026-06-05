@@ -238,6 +238,28 @@ class Stripe
     }
 
     /**
+     * Create a single-use, first-invoice-only discount coupon.
+     *
+     * The coupon holds no per-customer state — it is a throwaway discount
+     * definition applied to one Checkout Session's first invoice.
+     *
+     * @param  float   $amountOff  Discount in the major unit (e.g. 23.50).
+     * @param  string  $currency   ISO currency; must match the subscription's currency.
+     * @return string  The created coupon id.
+     */
+    public function createOnceCoupon(float $amountOff, string $currency) : string
+    {
+        $coupon = $this->getStripeClient()->coupons->create([
+            'amount_off' => (int) round($amountOff * 100),
+            'currency' => $currency,
+            'duration' => 'once',
+            'max_redemptions' => 1,
+        ]);
+
+        return $coupon->id;
+    }
+
+    /**
      * (Re)register a Stripe webhook endpoint pointing at this package's webhook route.
      *
      * Walks all existing endpoints (paginated), deletes any whose URL matches
