@@ -204,6 +204,18 @@ class Stripe
      */
     public function checkout($params)
     {
+        return redirect($this->checkoutSession($params)->url);
+    }
+
+    /**
+     * Create a Checkout Session and return the Session object (caller decides how to
+     * redirect and what to persist). Same param normalization as checkout().
+     *
+     * @param  array<string, mixed>  $params
+     * @return \Stripe\Checkout\Session
+     */
+    public function checkoutSession($params)
+    {
         $params = [
             ...$params,
             'line_items' => collect(data_get($params, 'line_items'))
@@ -213,12 +225,21 @@ class Stripe
             'cancel_url' => route('__stripe.cancel', data_get($params, 'metadata', [])),
         ];
 
-        $session = $this->getStripeClient()
+        return $this->getStripeClient()
             ->checkout
             ->sessions
             ->create($params);
+    }
 
-        return redirect($session->url);
+    /**
+     * Retrieve a Checkout Session by id (for reconciling payment state).
+     *
+     * @param  string  $id  Stripe Checkout Session id (cs_...).
+     * @return \Stripe\Checkout\Session
+     */
+    public function retrieveCheckoutSession(string $id)
+    {
+        return $this->getStripeClient()->checkout->sessions->retrieve($id, ['expand' => ['payment_intent']]);
     }
 
     /**
