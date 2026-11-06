@@ -109,10 +109,19 @@ Returns a Laravel `RedirectResponse` to the Stripe-hosted checkout page.
 
 | Input            | Result | Notes                                   |
 |------------------|--------|-----------------------------------------|
-| `"15.00"`, `"15.5"` | `1500`, `1550` | Decimal strings are multiplied by 100 |
+| `"15.00"`, `"15.5"` | `1500`, `1550` | Decimal values are converted to the currency's minor unit (x100 for most currencies) |
 | `1500`, `"1500"` | `1500` | Integer (smallest currency unit) passed through |
 
-For zero-decimal currencies (JPY, KRW, etc.), pass an integer — multiplying yen by 100 would be wrong.
+Conversion is currency-aware: for zero-decimal currencies (JPY, KRW, etc.) a decimal such as `"1,000.00"` becomes `1000`, not `100000`. Integer inputs are never converted.
+
+To convert a major-unit amount yourself, use `toMinorUnits()`:
+
+```php
+app('stripe')->toMinorUnits('1,234.56', 'MYR'); // 123456
+app('stripe')->toMinorUnits('1,000.00', 'jpy'); // 1000
+```
+
+The input is always treated as a major-unit amount, and the currency compare is case-insensitive. `createOnceCoupon()` uses the same conversion.
 
 ### Using an existing Stripe Price ID
 
@@ -240,6 +249,7 @@ Calls `accounts->all()` on the configured secret key. Useful as a settings-page 
 | `v1.0` | 10–13   | `^10.0`          | Laravel 13 dependency widening                                        |
 | `v1.1` | 10–13   | `>=10.0 <18.0`   | Webhook + checkout bug fixes; widened `stripe-php`                    |
 | `v1.2` | 10–13   | `>=10.0 <18.0`   | Adds `getValidatedEvent()`; consolidated webhook event parsing        |
+| `v2.3` | 10–13   | `>=10.0 <18.0`   | Zero-decimal currency support; adds `toMinorUnits()`                  |
 
 ### Upgrading from v0.1 / v1.0
 

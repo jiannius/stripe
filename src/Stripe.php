@@ -193,8 +193,8 @@ class Stripe
      * Create a Stripe Checkout session and return a redirect response to its URL.
      *
      * `price_data.unit_amount` values are normalized to the smallest currency
-     * unit: decimal strings are multiplied by 100, integer-like values pass
-     * through unchanged. Line items that use a Stripe Price ID (`price` key,
+     * unit: decimal values are converted per currency (zero-decimal currencies
+     * such as JPY are not multiplied), integer-like values pass through unchanged. Line items that use a Stripe Price ID (`price` key,
      * no `price_data`) are forwarded untouched. `success_url` and `cancel_url`
      * are always overwritten with the package's named routes; any `metadata`
      * is forwarded as route parameters on those URLs.
@@ -264,14 +264,14 @@ class Stripe
      * The coupon holds no per-customer state — it is a throwaway discount
      * definition applied to one Checkout Session's first invoice.
      *
-     * @param  float   $amountOff  Discount in the major unit (e.g. 23.50).
+     * @param  float   $amountOff  Discount in the major unit (e.g. 23.50, or 500 for JPY).
      * @param  string  $currency   ISO currency; must match the subscription's currency.
      * @return string  The created coupon id.
      */
     public function createOnceCoupon(float $amountOff, string $currency) : string
     {
         $coupon = $this->getStripeClient()->coupons->create([
-            'amount_off' => (int) round($amountOff * 100),
+            'amount_off' => $this->toMinorUnits($amountOff, $currency),
             'currency' => $currency,
             'duration' => 'once',
             'max_redemptions' => 1,
@@ -394,7 +394,11 @@ class Stripe
 
     /**
      * Normalize a single Checkout line item by converting `price_data.unit_amount`
-     * to the smallest currency unit. Items without `price_data` pass through.
+     * to the smallest currency unit, using `price_data.currency`. Items without
+     * `price_data` pass through.
+     *
+     * Integer-like values (no decimal point) are assumed to already be in the
+     * smallest currency unit and are passed through; only decimal values are converted.
      *
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>
@@ -405,28 +409,45 @@ class Stripe
             return $item;
         }
 
-        $item['price_data']['unit_amount'] = $this->toStripeAmount($item['price_data']['unit_amount']);
+        $amount = $item['price_data']['unit_amount'];
+        $clean = str_replace(',', '', (string) $amount);
+
+        $item['price_data']['unit_amount'] = str_contains($clean, '.')
+            ? $this->toMinorUnits($clean, (string) ($item['price_data']['currency'] ?? ''))
+            : (int) $clean;
 
         return $item;
     }
 
     /**
-     * Convert a monetary amount to an integer in the smallest currency unit.
+     * Convert a major-unit amount (e.g. "1,234.56") to an integer in the
+     * currency's minor unit, as the Stripe API expects.
      *
-     * Commas are stripped (thousands separators). Decimal inputs are
-     * multiplied by 100 and rounded; integer-like inputs are cast as-is.
+     * Commas are stripped. Zero-decimal currencies use a multiplier of 1; every
+     * other currency uses 100. The input is always treated as a major-unit
+     * amount, so toMinorUnits(1050, 'myr') is 105000. The currency compare is
+     * case-insensitive.
      *
-     * @param  mixed  $amount
+     * Per https://docs.stripe.com/currencies: the zero-decimal list below is the
+     * set the API expects without multiplication. ISK and UGX are zero-decimal in
+     * practice but the API still expects a two-decimal value (e.g. 5 ISK is
+     * `500`), so they use the default multiplier of 100. HUF and TWD are
+     * two-decimal for charges (zero-decimal only for payouts), so they also use 100.
+     *
+     * @param  int|float|string  $amount    Major-unit amount.
+     * @param  string            $currency  ISO currency code, any case.
      * @return int
      */
-    protected function toStripeAmount($amount) : int
+    public function toMinorUnits(int|float|string $amount, string $currency) : int
     {
+        $zeroDecimal = [
+            'BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA',
+            'PYG', 'RWF', 'VND', 'VUV', 'XAF', 'XOF', 'XPF',
+        ];
+
         $clean = str_replace(',', '', (string) $amount);
+        $multiplier = in_array(strtoupper($currency), $zeroDecimal, true) ? 1 : 100;
 
-        if (str_contains($clean, '.')) {
-            return (int) round(((float) $clean) * 100);
-        }
-
-        return (int) $clean;
+        return (int) round(((float) $clean) * $multiplier);
     }
 }
